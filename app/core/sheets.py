@@ -220,7 +220,7 @@ def append_raw_grn_to_sheet(client, df_grn: pd.DataFrame) -> int:
 
     # Load cache
     import os, json as _json
-    cache_file = "data/.grn_export_cache.json"
+    cache_file = "/tmp/.grn_export_cache.json"
     if os.path.exists(cache_file):
         try:
             cached = _json.load(open(cache_file))

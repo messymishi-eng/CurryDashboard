@@ -149,3 +149,193 @@ def check_grn_duplicates(new_df: pd.DataFrame,
         "new":        new_df[~is_dup].copy(),
         "duplicates": new_df[is_dup].copy()
     }
+
+
+def fetch_sku_mapping(client) -> pd.DataFrame:
+    """
+    Fetch SKU mapping from MAPPING tab.
+    Filter: Brand == Zepto only.
+    MAPPING columns: Brand | Item Code | Item | Item
+    Returns DataFrame with: sku_id, sku_code, sku_name
+    """
+    sh  = client.open_by_url(SHEET_URL)
+    ws  = sh.worksheet("MAPPING")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    # Rename by position since "Item" appears twice
+    # Position 0 = Brand, 1 = Item Code, 2 = Item (sku_code), 3 = Item (sku_name)
+    data_rows = all_values[1:]
+    rows = []
+    for row in data_rows:
+        if len(row) >= 4:
+            rows.append({
+                "brand":    row[0].strip(),
+                "sku_id":   row[1].strip(),
+                "sku_code": row[2].strip(),
+                "sku_name": row[3].strip(),
+            })
+
+    df = pd.DataFrame(rows)
+
+    # Filter Zepto only
+    df = df[df["brand"] == "Zepto"].copy()
+    df = df[["sku_id", "sku_code", "sku_name"]].copy()
+    df = df[df["sku_id"] != ""].reset_index(drop=True)
+
+    return df
+
+
+def append_raw_grn_to_sheet(client, df_grn: pd.DataFrame) -> int:
+    """
+    Append new raw GRN rows to GRN-ZEPTO tab.
+    Duplicate key: GRN Code + SKU Code (UUID).
+    Fills FacilityName from uploaded file.
+    Fills UNIT COST from uploaded file, fallback to sheet lookup.
+    Calculates GrnLineValueWithTax = UNIT COST x ReceivedQty.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("GRN-ZEPTO")
+
+    existing = ws.get_all_values()
+
+    # Build duplicate key set: GrnNumber + SkuCode (col 1 + col 9)
+    existing_keys = set()
+    sku_lookup    = {}
+    if len(existing) > 1:
+        for row in existing[1:]:
+            if len(row) > 9:
+                grn_code = row[1].strip()
+                sku_code = row[9].strip()
+                if grn_code and sku_code:
+                    existing_keys.add((grn_code, sku_code))
+                if len(row) > 12 and sku_code and row[12].strip():
+                    if sku_code not in sku_lookup:
+                        sku_lookup[sku_code] = {
+                            "unit_cost": row[12].strip(),
+                            "facility":  row[3].strip() if len(row) > 3 else ""
+                        }
+
+    # Load cache
+    import os, json as _json
+    cache_file = "data/.grn_export_cache.json"
+    if os.path.exists(cache_file):
+        try:
+            cached = _json.load(open(cache_file))
+            for k in cached:
+                existing_keys.add(tuple(k))
+        except Exception:
+            pass
+
+    print(f"  [GRN Export] Existing keys: {len(existing_keys)}")
+
+    today = pd.Timestamp.today().strftime("%d-%b-%Y")
+    rows  = []
+    seen  = set()
+
+    for _, row in df_grn.iterrows():
+        grn_id = str(row.get("grn_id", "")).strip()
+        sku_id = str(row.get("sku_id", "")).strip()
+
+        if not grn_id or grn_id == "nan":
+            continue
+
+        key = (grn_id, sku_id)
+        if key in existing_keys or key in seen:
+            continue
+        seen.add(key)
+
+        grn_qty = int(row.get("grn_qty", 0))
+
+        # Get unit_cost from uploaded file first
+        unit_cost_raw = row.get("unit_cost", "")
+        if unit_cost_raw == "" or str(unit_cost_raw) == "nan" or str(unit_cost_raw) == "0":
+            unit_cost = sku_lookup.get(sku_id, {}).get("unit_cost", "")
+        else:
+            unit_cost = str(unit_cost_raw)
+
+        # Get facility from uploaded file first
+        facility_raw = row.get("facility", "")
+        if facility_raw == "" or str(facility_raw) == "nan":
+            facility = sku_lookup.get(sku_id, {}).get("facility", "")
+        else:
+            facility = str(facility_raw)
+
+        # Calculate GrnLineValueWithTax
+        try:
+            grn_line_value = str(round(float(unit_cost) * grn_qty, 2)) if unit_cost else ""
+        except Exception:
+            grn_line_value = ""
+
+        rows.append([
+            today,
+            grn_id,
+            str(row.get("po_id", "")),
+            facility,
+            str(row.get("invoice_id", "")),
+            "",
+            "",
+            "",
+            "",
+            sku_id,
+            str(row.get("product_name", "")),
+            str(grn_qty),
+            unit_cost,
+            grn_line_value,
+        ])
+
+    print(f"  [GRN Export] New rows: {len(rows)}")
+    if rows:
+        ws.append_rows(rows, value_input_option="USER_ENTERED")
+        try:
+            existing_cache = []
+            if os.path.exists(cache_file):
+                existing_cache = _json.load(open(cache_file))
+            _json.dump(existing_cache + [[r[1], r[9]] for r in rows], open(cache_file, "w"))
+        except Exception:
+            pass
+    return len(rows)
+
+
+def append_reco_to_sheet(client, df_final: pd.DataFrame):
+    """
+    Append reconciliation results to Reconciliation data zepto tab.
+    Columns: Date | GRN Code | PO Code | Store Name | Invoice Number | SKU ID | GRN Quantity
+    """
+    sh = client.open_by_url(SHEET_URL)
+
+    # Get or create the sheet
+    try:
+        ws = sh.worksheet("Reconcilation data zepto")
+    except Exception:
+        ws = sh.add_worksheet("Reconcilation data zepto", rows=5000, cols=10)
+
+    # Check if headers exist
+    existing = ws.get_all_values()
+    if not existing or existing[0] != ["Date", "GRN Code", "PO Code", "Store Name",
+                                        "Invoice Number", "SKU ID", "GRN Quantity"]:
+        ws.update("A1", [["Date", "GRN Code", "PO Code", "Store Name",
+                           "Invoice Number", "SKU ID", "GRN Quantity"]])
+
+    today = pd.Timestamp.today().strftime("%d-%b-%Y")
+
+    rows = []
+    for _, row in df_final.iterrows():
+        grn_id = str(row.get("grn_id", ""))
+        if grn_id == "nan":
+            grn_id = ""
+        rows.append([
+            today,
+            grn_id,
+            str(row.get("po_id", "")),
+            str(row.get("facility", row.get("warehouse", ""))),
+            str(row.get("invoice_id", "")),
+            str(row.get("sku_id", "")),
+            str(int(row.get("grn_qty", 0))),
+        ])
+
+    if rows:
+        ws.append_rows(rows, value_input_option="USER_ENTERED")
+    return len(rows)

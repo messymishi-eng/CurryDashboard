@@ -7,6 +7,8 @@ SIGNATURES = {
     "grn": {
         "required_any": [
             ["PO Code", "SKU ID", "GRN Quantity", "PO Quantity"],
+            ["PO Code", "SKU ID", "GRN Quantity", "Cost Price"],
+            ["PO Code", "SKU ID", "GRN Quantity", "To Store Name"],
             ["PO Code", "SKU ID", "GRN Qty", "PO Qty"],
             ["PO Number", "SKU ID", "GRN Quantity"],
             ["PO Code", "SKU ID"],

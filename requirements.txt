@@ -1,9 +1,8 @@
-streamlit==1.45.1
-pandas==3.0.5
-gspread==6.2.1
-google-auth==2.56.3
-google-auth-oauthlib==1.4.0
-openpyxl==3.1.5
-xlrd==2.0.1
-python-dateutil==2.9.0
-setuptools
+streamlit
+pandas
+gspread
+google-auth
+google-auth-oauthlib
+openpyxl
+xlrd
+python-dateutil

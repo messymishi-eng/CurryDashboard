@@ -21,7 +21,7 @@ if st.session_state["platform"] == "zepto":
     render()
 
 else:
-    st.markdown("## 🥘 Curry Dashboard")
+    st.markdown("##  Curry Dashboard")
     st.divider()
     st.markdown("### Select Platform")
     if st.button("🟢 Zepto", use_container_width=True, type="primary"):

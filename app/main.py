@@ -14,7 +14,11 @@ if "platform" not in st.session_state:
     st.session_state["platform"] = None
 
 if st.session_state["platform"] == "zepto":
-    from app.pages.zepto_page import render
+    try:
+        from app.pages.zepto_page import render
+    except ImportError:
+        from pages.zepto_page import render
+
     if st.button("← Back"):
         st.session_state["platform"] = None
         st.session_state.pop("zepto_final_df", None)

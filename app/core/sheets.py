@@ -13,9 +13,38 @@ CUTOFF     = pd.Timestamp("2026-04-01")
 
 
 def get_client(json_path: str = "data/service_account.json"):
-    info  = json.load(open(json_path))
-    creds = Credentials.from_service_account_info(info, scopes=SCOPES)
-    return gspread.authorize(creds)
+    import os
+
+    # 1. Try Streamlit secrets
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            info  = dict(st.secrets["gcp_service_account"])
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+            return gspread.authorize(creds)
+    except Exception:
+        pass
+
+    # 2. Try environment variable
+    gcp_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+    if gcp_json:
+        info  = json.loads(gcp_json)
+        creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        return gspread.authorize(creds)
+
+    # 3. Try Render secret file paths
+    for path in [
+        "/etc/secrets/service_account.json",
+        "/opt/render/project/src/service_account.json",
+        "service_account.json",
+        json_path,
+    ]:
+        if os.path.exists(path):
+            info  = json.load(open(path))
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+            return gspread.authorize(creds)
+
+    raise FileNotFoundError("No service account credentials found")
 
 
 def fetch_dispatch_sheet(client) -> pd.DataFrame:

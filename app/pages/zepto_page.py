@@ -5,6 +5,7 @@ from datetime import datetime
 from app.ingestion.file_loader import load_file
 from app.core.reconciliation import reconcile, get_summary
 from app.core.sheets import (
+    append_reconciliation_results,
     get_client,
     fetch_dispatch_sheet,
     fetch_grn_sheet,
@@ -227,10 +228,15 @@ def _process(uploaded_file):
         df_final["processed_date"] = datetime.today().strftime("%d-%b-%Y")
 
         # ── Append raw GRN to GRN-ZEPTO sheet ────────────────────
-        progress.progress(95, text="Saving raw GRN to Google Sheet...")
+        progress.progress(90, text="Saving raw GRN to Google Sheet...")
         if not df_grn_new.empty:
             grn_export_rows = append_raw_grn_to_sheet(client, df_grn_new)
             st.success(f"✅ {grn_export_rows} new GRN rows saved to GRN-ZEPTO sheet")
+
+        # ── Export to Reconciliation Results sheet ────────────────
+        progress.progress(95, text="Saving reconciliation results...")
+        reco_rows = append_reconciliation_results(client, df_final, dispatch_df)
+        st.success(f"✅ {reco_rows} reconciliation rows saved to sheet")
 
         progress.progress(100, text="Done!")
 

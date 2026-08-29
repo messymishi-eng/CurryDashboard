@@ -368,3 +368,98 @@ def append_reco_to_sheet(client, df_final: pd.DataFrame):
     if rows:
         ws.append_rows(rows, value_input_option="USER_ENTERED")
     return len(rows)
+
+
+def append_reconciliation_results(client, df_final: pd.DataFrame, dispatch_df: pd.DataFrame) -> int:
+    """
+    Append reconciliation results to Reconciliation Results tab.
+    Duplicate key: PO Number + SKU Code.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("Reconciliation Results")
+
+    existing = ws.get_all_values()
+
+    # Build existing keys (PO Number + SKU Code) — col 3 + col 6
+    existing_keys = set()
+    if len(existing) > 1:
+        for row in existing[1:]:
+            if len(row) >= 7 and row[3].strip() and row[6].strip():
+                existing_keys.add((row[3].strip(), row[6].strip()))
+
+    # Build dispatch lookup: po_id -> dispatch_date, invoice_id
+    dispatch_lookup = {}
+    if "PO Number" in dispatch_df.columns:
+        for _, row in dispatch_df.iterrows():
+            po = str(row.get("PO Number", "")).strip()
+            if po:
+                dispatch_lookup[po] = {
+                    "dispatch_date": str(row.get("Dispatch Date", ""))[:10],
+                    "invoice_id":    str(row.get("INVOICE #", "")),
+                }
+
+    today = pd.Timestamp.today().strftime("%d-%b-%Y")
+    rows  = []
+    seen  = set()
+
+    for _, row in df_final.iterrows():
+        period = str(row.get("period", "in_period"))
+        if period == "out_of_period":
+            continue
+
+        po_id    = str(row.get("po_id", "")).strip()
+        sku_code = str(row.get("sku_code", "")).strip()
+
+        if not po_id or not sku_code:
+            continue
+
+        key = (po_id, sku_code)
+        if key in existing_keys or key in seen:
+            continue
+        seen.add(key)
+
+        dispatch_info = dispatch_lookup.get(po_id, {})
+        grn_qty       = int(row.get("grn_qty", 0))
+        dispatch_qty  = int(row.get("dispatch_qty", 0))
+        po_qty        = int(row.get("po_qty", 0))
+        diff          = grn_qty - dispatch_qty
+
+        rows.append([
+            today,
+            dispatch_info.get("dispatch_date", ""),
+            dispatch_info.get("invoice_id", str(row.get("invoice_id", ""))),
+            po_id,
+            "Zepto",
+            str(row.get("sku_name", "")),
+            sku_code,
+            str(po_qty),
+            str(dispatch_qty),
+            str(grn_qty),
+            str(diff),
+            str(row.get("dispatch_status", "")),
+            str(row.get("grn_status", "")),
+            str(row.get("status", "")),
+            str(row.get("reason", "")),
+        ])
+
+    if rows:
+        ws.append_rows(rows, value_input_option="USER_ENTERED")
+    return len(rows)
+
+
+def fetch_reconciliation_results(client) -> pd.DataFrame:
+    """
+    Fetch all data from Reconciliation Results tab.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("Reconciliation Results")
+
+    all_values = ws.get_all_values()
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    headers   = all_values[0]
+    data_rows = all_values[1:]
+    df = pd.DataFrame(data_rows, columns=headers)
+    df = df[df["PO Number"].astype(str).str.strip() != ""].copy()
+    return df.reset_index(drop=True)

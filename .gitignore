@@ -6,3 +6,5 @@ data/service_account.json
 data/.grn_export_cache.json
 *.egg-info/
 currydashboard.egg-info/
+__pycache__/
+*.pyc

@@ -147,50 +147,6 @@ def reconcile(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
-def attach_return_flags(df: pd.DataFrame, df_returns: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add return_flag / return_note columns to reconciliation results.
-    Does NOT change 'status' or 'grn_status' — purely additive.
-    Matches on Invoice Number (Returns) vs invoice_id (reconciliation df).
-    """
-    df = df.copy()
-    df["return_flag"] = False
-    df["return_note"] = ""
-
-    if df_returns is None or df_returns.empty or "invoice_id" not in df.columns:
-        return df
-
-    agg = (
-        df_returns.groupby("Invoice Number")
-        .agg(
-            return_types=("Return Type", lambda x: ", ".join(sorted(set(x.astype(str))))),
-            actual_qty=("Actual Qty", "sum"),
-            document_qty=("Document Qty", "sum"),
-        )
-        .reset_index()
-    )
-
-    invoice_lookup = agg.set_index("Invoice Number").to_dict(orient="index")
-
-    def flag_row(row):
-        inv = str(row.get("invoice_id", "")).strip()
-        if inv in invoice_lookup:
-            info = invoice_lookup[inv]
-            note = (
-                f"Return on file ({info['return_types']}): "
-                f"Actual Qty {int(info['actual_qty'])}, "
-                f"Document Qty {int(info['document_qty'])}"
-            )
-            return True, note
-        return False, ""
-
-    flags = df.apply(flag_row, axis=1, result_type="expand")
-    df["return_flag"] = flags[0]
-    df["return_note"] = flags[1]
-
-    return df
-
-
 def get_summary(df: pd.DataFrame) -> dict:
     return {
         "total_records":       len(df),

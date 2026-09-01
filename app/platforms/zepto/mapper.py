@@ -23,7 +23,7 @@ def enrich_dispatch_with_sku(df_dispatch, df_sku):
     return enriched.reset_index(drop=True)
 
 
-def build_unified(df_grn_enriched, df_dispatch_enriched):
+def build_unified(df_grn_enriched, df_dispatch_enriched, sheet_grn_pos=None):
     dispatch_agg = (
         df_dispatch_enriched
         .groupby(["po_id", "sku_code"], as_index=False)
@@ -93,9 +93,18 @@ def build_unified(df_grn_enriched, df_dispatch_enriched):
     })
     dispatch_out["po_qty"]       = 0
     dispatch_out["grn_qty"]      = 0
-    dispatch_out["period"]       = "out_of_period"
     dispatch_out["grn_id"]       = None
     dispatch_out["product_name"] = None
+
+    # Check if dispatch POs exist in sheet GRN
+    # If yes → already reconciled (out_of_period)
+    # If no  → genuinely missing GRN (in_period, will show as Missing GRN)
+    if sheet_grn_pos is not None:
+        dispatch_out["period"] = dispatch_out["po_id"].apply(
+            lambda x: "out_of_period" if x in sheet_grn_pos else "in_period"
+        )
+    else:
+        dispatch_out["period"] = "out_of_period"
 
     final = pd.concat([unified, dispatch_out], ignore_index=True)
     return final.reset_index(drop=True)

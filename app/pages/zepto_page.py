@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 from app.ingestion.file_loader import load_file
-from app.core.reconciliation import reconcile, get_summary, attach_return_flags
+from app.core.reconciliation import reconcile, get_summary
 from app.core.sheets import (
     append_reconciliation_results,
     get_client,
@@ -12,7 +12,6 @@ from app.core.sheets import (
     fetch_sku_mapping,
     check_grn_duplicates,
     append_raw_grn_to_sheet,
-    fetch_returns_sheet,
 )
 
 SKU_COLS = [
@@ -220,7 +219,9 @@ def _process(uploaded_file):
 
         # ── Build unified DataFrame ───────────────────────────────
         from app.platforms.zepto.mapper import build_unified
-        df_unified = build_unified(df_grn_e, df_disp_e)
+        # Pass sheet GRN POs so dispatch_out rows are correctly classified
+        sheet_grn_pos_set = set(sheet_grn_df["po_id"].astype(str).str.strip().tolist())
+        df_unified = build_unified(df_grn_e, df_disp_e, sheet_grn_pos=sheet_grn_pos_set)
 
         progress.progress(90, text="Reconciling...")
 

@@ -178,6 +178,83 @@ def check_grn_duplicates(new_df: pd.DataFrame,
         "new":        new_df[~is_dup].copy(),
         "duplicates": new_df[is_dup].copy()
     }
+def fetch_conso_po_sheet(client) -> pd.DataFrame:
+    """
+    Fetch ConsoPO tab.
+    Rows 1-3 = blank/title rows (skip), Row 4 = real headers, Row 5+ = data.
+    Filter: Channel == Zepto.
+    Primary key: PO no. (also carries Invoice No.)
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("ConsoPO")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 4:
+        return pd.DataFrame()
+
+    headers   = all_values[3]   # Row 4 = real headers
+    data_rows = all_values[4:]  # Row 5+ = data
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    # Filter Zepto only (via Channel, not Brand)
+    if "Channel" in df.columns:
+        df = df[df["Channel"].astype(str).str.strip() == "Zepto"].copy()
+
+    # Clean PO no. (primary key)
+    if "PO no." in df.columns:
+        df["PO no."] = df["PO no."].astype(str).str.strip()
+        df = df[df["PO no."].notna()]
+        df = df[df["PO no."] != ""]
+        df = df[df["PO no."] != "nan"]
+
+    return df.reset_index(drop=True)
+
+
+def fetch_returns_sheet(client) -> pd.DataFrame:
+    """
+    Fetch Returns tab.
+    Rows 1-3 = blank/title rows (skip), Row 4 = real headers, Row 5+ = data.
+    Filter: Platform == Zepto.
+    Fetches: Type (return type), Actual Qty, Document Qty.
+    Primary key: Doc No (this is the Invoice Number).
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("Returns")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 4:
+        return pd.DataFrame()
+
+    headers   = all_values[3]   # Row 4 = real headers
+    data_rows = all_values[4:]  # Row 5+ = data
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    # Filter Zepto only (via Platform, not Brand)
+    if "Platform" in df.columns:
+        df = df[df["Platform"].astype(str).str.strip() == "Zepto"].copy()
+
+    # Clean Doc No (primary key / invoice number)
+    if "Doc No" in df.columns:
+        df["Doc No"] = df["Doc No"].astype(str).str.strip()
+        df = df[df["Doc No"].notna()]
+        df = df[df["Doc No"] != ""]
+        df = df[df["Doc No"] != "nan"]
+        df = df.rename(columns={"Doc No": "Invoice Number"})
+
+    # Numeric coercion for qty columns
+    for col in ["Actual Qty", "Document Qty"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # Keep the relevant columns explicitly (return type = 'Type')
+    keep_cols = [c for c in ["Invoice Number", "Date", "Doc Date", "Platform",
+                              "Type", "ITEM Code", "SKU Name",
+                              "Actual Qty", "Document Qty"] if c in df.columns]
+    df = df[keep_cols].rename(columns={"Type": "Return Type"})
+
+    return df.reset_index(drop=True)
 
 
 def fetch_sku_mapping(client) -> pd.DataFrame:

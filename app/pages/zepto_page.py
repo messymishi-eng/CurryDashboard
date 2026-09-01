@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 from app.ingestion.file_loader import load_file
-from app.core.reconciliation import reconcile, get_summary
+from app.core.reconciliation import reconcile, get_summary, attach_return_flags
 from app.core.sheets import (
     append_reconciliation_results,
     get_client,
@@ -224,6 +224,11 @@ def _process(uploaded_file):
         progress.progress(90, text="Reconciling...")
 
         df_final = reconcile(df_unified)
+        try:
+            df_returns = fetch_returns_sheet(client)
+            df_final = attach_return_flags(df_final, df_returns)
+        except Exception as _e:
+            st.warning(f"Could not attach return flags: {_e}")
         df_final["platform"]       = "Zepto"
         df_final["processed_date"] = datetime.today().strftime("%d-%b-%Y")
 

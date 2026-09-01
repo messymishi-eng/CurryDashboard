@@ -105,7 +105,7 @@ def render():
     display_cols = [
         "Dispatch Date", "INVOICE #", "PO Number", "Brand",
         "SKU Name", "PO Qty", "Dispatch Qty", "GRN Qty",
-        "Difference", "Flag", "Return Note"
+        "Difference", "Flag"
     ]
     display_cols = [c for c in display_cols if c in filtered.columns]
     display_df   = filtered[display_cols].copy()

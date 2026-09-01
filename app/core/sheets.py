@@ -517,7 +517,6 @@ def append_reconciliation_results(client, df_final: pd.DataFrame, dispatch_df: p
             str(row.get("grn_status", "")),
             str(row.get("status", "")),
             str(row.get("reason", "")),
-            str(row.get("return_note", "")),
         ])
 
     if rows:

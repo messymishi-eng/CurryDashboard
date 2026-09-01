@@ -225,11 +225,7 @@ def _process(uploaded_file):
         progress.progress(90, text="Reconciling...")
 
         df_final = reconcile(df_unified)
-        try:
-            df_returns = fetch_returns_sheet(client)
-            df_final = attach_return_flags(df_final, df_returns)
-        except Exception as _e:
-            st.warning(f"Could not attach return flags: {_e}")
+        # Returns feature disconnected — moving to separate page (see returns_page.py plan)
         df_final["platform"]       = "Zepto"
         df_final["processed_date"] = datetime.today().strftime("%d-%b-%Y")
 

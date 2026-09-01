@@ -12,6 +12,7 @@ from app.core.sheets import (
     fetch_sku_mapping,
     check_grn_duplicates,
     append_raw_grn_to_sheet,
+    fetch_returns_sheet,
 )
 
 SKU_COLS = [

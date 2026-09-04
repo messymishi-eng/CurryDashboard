@@ -25,10 +25,28 @@ if st.session_state["platform"] == "zepto":
         st.rerun()
     render()
 
+elif st.session_state["platform"] == "swiggy":
+    try:
+        from app.pages.swiggy_page import render
+    except ImportError:
+        from pages.swiggy_page import render
+
+    if st.button("← Back"):
+        st.session_state["platform"] = None
+        st.session_state.pop("swiggy_final_df", None)
+        st.rerun()
+    render()
+
 else:
     st.markdown("## 🥘 Curry Dashboard")
     st.divider()
     st.markdown("### Select Platform")
-    if st.button("🟢 Zepto", use_container_width=True, type="primary"):
-        st.session_state["platform"] = "zepto"
-        st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🟢 Zepto", use_container_width=True, type="primary"):
+            st.session_state["platform"] = "zepto"
+            st.rerun()
+    with col2:
+        if st.button("🟠 Swiggy", use_container_width=True, type="primary"):
+            st.session_state["platform"] = "swiggy"
+            st.rerun()

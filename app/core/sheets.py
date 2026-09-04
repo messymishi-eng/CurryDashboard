@@ -494,3 +494,180 @@ def fetch_reconciliation_results(client) -> pd.DataFrame:
     df = pd.DataFrame(data_rows, columns=headers)
     df = df[df["PO Number"].astype(str).str.strip() != ""].copy()
     return df.reset_index(drop=True)
+
+
+# ============================================================
+# SWIGGY — fully isolated fetch functions (separate from Zepto)
+# ============================================================
+
+def fetch_swiggy_dispatch_sheet(client) -> pd.DataFrame:
+    """
+    Fetch DISPATCH tab, filtered for Swiggy.
+    Row 1 = summary (skip), Row 2 = real headers, Row 3+ = data.
+    Filter: Brand == Swiggy AND Dispatch Date >= CUTOFF.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("DISPATCH")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    headers   = all_values[1]
+    data_rows = all_values[2:]
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    if "Brand" in df.columns:
+        df = df[df["Brand"].astype(str).str.strip() == "Swiggy"].copy()
+
+    if "Dispatch Date" in df.columns:
+        df["Dispatch Date"] = pd.to_datetime(
+            df["Dispatch Date"], dayfirst=True, errors="coerce"
+        )
+        df = df[df["Dispatch Date"] >= CUTOFF].copy()
+
+    if "PO Number" in df.columns:
+        df["PO Number"] = df["PO Number"].astype(str).str.strip()
+        df = df[df["PO Number"].notna()]
+        df = df[df["PO Number"] != ""]
+
+    return df.reset_index(drop=True)
+
+
+def fetch_swiggy_grn_sheet(client) -> pd.DataFrame:
+    """
+    Fetch GRN-SWIGGY tab.
+    Row 1 = real headers, Row 2+ = data.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("GRN-SWIGGY")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    headers   = all_values[0]
+    data_rows = all_values[1:]
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    df = df.rename(columns={
+        "REPORT DATE":          "report_date",
+        "GrnNumber":            "grn_id",
+        "PurchaseOrderNumber":  "po_id",
+        "FacilityName":         "facility",
+        "InvoiceNumber":        "invoice_id",
+        "SkuCode":              "sku_item_code",
+        "SkuDescription":       "sku_description",
+        "ReceivedQty":          "grn_qty",
+    })
+
+    if "po_id" in df.columns:
+        df["po_id"] = df["po_id"].astype(str).str.strip()
+
+    if "report_date" in df.columns:
+        df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce", dayfirst=True)
+
+    if "grn_qty" in df.columns:
+        df["grn_qty"] = pd.to_numeric(df["grn_qty"], errors="coerce").fillna(0)
+
+    keep_cols = [c for c in ["report_date","grn_id","po_id","facility","invoice_id",
+                              "sku_item_code","sku_description","grn_qty"] if c in df.columns]
+    df = df[keep_cols]
+
+    return df.reset_index(drop=True)
+
+
+def fetch_swiggy_sku_mapping(client) -> pd.DataFrame:
+    """
+    Fetch MAPPING tab, filtered for Swiggy.
+    Raw columns: Brand, Item Code, Item (abbreviation), Item (full name) -- duplicate 'Item' header.
+    Returns: item_code, sku_code (abbreviation), sku_name
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("MAPPING")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    data_rows = all_values[1:]
+
+    df = pd.DataFrame(data_rows)
+    df = df.iloc[:, :4]
+    df.columns = ["brand", "item_code", "sku_code", "sku_name"]
+
+    df = df[df["brand"].astype(str).str.strip() == "Swiggy"].copy()
+    df["item_code"] = df["item_code"].astype(str).str.strip()
+    df["sku_code"]  = df["sku_code"].astype(str).str.strip()
+
+    return df[["item_code", "sku_code", "sku_name"]].reset_index(drop=True)
+
+
+def fetch_swiggy_conso_po_sheet(client) -> pd.DataFrame:
+    """
+    Fetch ConsoPO tab, filtered for Swiggy.
+    Row 4 = real headers, Row 5+ = data.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("ConsoPO")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 4:
+        return pd.DataFrame()
+
+    headers   = all_values[3]
+    data_rows = all_values[4:]
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    if "Channel" in df.columns:
+        df = df[df["Channel"].astype(str).str.strip() == "Swiggy"].copy()
+
+    if "PO no." in df.columns:
+        df["PO no."] = df["PO no."].astype(str).str.strip()
+        df = df[df["PO no."].notna()]
+        df = df[df["PO no."] != ""]
+        df = df[df["PO no."] != "nan"]
+
+    return df.reset_index(drop=True)
+
+
+def fetch_swiggy_returns_sheet(client) -> pd.DataFrame:
+    """
+    Fetch Returns tab, filtered for Swiggy.
+    Row 4 = real headers, Row 5+ = data.
+    """
+    sh = client.open_by_url(SHEET_URL)
+    ws = sh.worksheet("Returns")
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 4:
+        return pd.DataFrame()
+
+    headers   = all_values[3]
+    data_rows = all_values[4:]
+
+    df = pd.DataFrame(data_rows, columns=headers)
+
+    if "Platform" in df.columns:
+        df = df[df["Platform"].astype(str).str.strip() == "Swiggy"].copy()
+
+    if "Doc No" in df.columns:
+        df["Doc No"] = df["Doc No"].astype(str).str.strip()
+        df = df[df["Doc No"].notna()]
+        df = df[df["Doc No"] != ""]
+        df = df[df["Doc No"] != "nan"]
+        df = df.rename(columns={"Doc No": "Invoice Number"})
+
+    for col in ["Actual Qty", "Document Qty"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    keep_cols = [c for c in ["Invoice Number", "Date", "Doc Date", "Platform",
+                              "Type", "ITEM Code", "SKU Name",
+                              "Actual Qty", "Document Qty"] if c in df.columns]
+    df = df[keep_cols].rename(columns={"Type": "Return Type"})
+
+    return df.reset_index(drop=True)
